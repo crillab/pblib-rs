@@ -52,6 +52,7 @@ where
     build
         .cpp(true)
         .warnings(true)
+        .extra_warnings(true)
         .opt_level(3)
         .define("NDEBUG", "1");
     flags.iter().for_each(|f| {
@@ -64,6 +65,8 @@ where
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/cpblib.cc");
+    println!("cargo:rerun-if-changed=src/cpblib.h");
     build_dep(
         &["-std=c++11", "-Wno-class-memaccess"],
         &[MINISAT_DIR],
