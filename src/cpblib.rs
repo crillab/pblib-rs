@@ -30,6 +30,7 @@ impl PB2CNF {
         leq: i64,
         first_aux_var: i32,
     ) -> EncodingResult {
+        assert_len_eq(&weights, &literals);
         let formula_ptr = unsafe {
             encodeLeq(
                 self.0,
@@ -53,6 +54,7 @@ impl PB2CNF {
         geq: i64,
         first_aux_var: i32,
     ) -> EncodingResult {
+        assert_len_eq(&weights, &literals);
         let formula_ptr = unsafe {
             encodeGeq(
                 self.0,
@@ -77,6 +79,7 @@ impl PB2CNF {
         geq: i64,
         first_aux_var: i32,
     ) -> EncodingResult {
+        assert_len_eq(&weights, &literals);
         let formula_ptr = unsafe {
             encodeBoth(
                 self.0,
@@ -149,6 +152,16 @@ fn decode_formula_data(formula_ptr: *mut i32) -> EncodingResult {
     EncodingResult {
         clauses,
         next_free_var_id,
+    }
+}
+
+fn assert_len_eq(weights: &[i64], literals: &[i32]) {
+    if weights.len() != literals.len() {
+        panic!(
+            "weights len ({}) and literals len ({}) must be equal",
+            weights.len(),
+            literals.len()
+        );
     }
 }
 
@@ -276,5 +289,14 @@ mod tests {
         clauses.iter_mut().for_each(|cl| cl.sort_unstable());
         clauses.sort_unstable();
         assert_eq!(expected_formula, clauses)
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_weights_and_literals_len_mismatch() {
+        let weights = vec![1];
+        let literals = vec![1, 2];
+        let pb2cnf = PB2CNF::new();
+        pb2cnf.encode_leq(weights, literals, 1, 3);
     }
 }
