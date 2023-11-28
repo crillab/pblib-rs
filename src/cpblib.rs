@@ -235,6 +235,7 @@ extern "C" {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use splr::{Certificate, Config, SolveIF, Solver, SolverError};
 
     #[test]
     fn test_leq_clause() {
@@ -242,7 +243,7 @@ mod tests {
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         let encoding = pb2cnf.encode_leq(weights, literals, 1, 3);
-        assert_encoding_eq(vec![vec![-2, -1]], 3, encoding);
+        assert_encoding_eq(&[vec![-2, -1]], 3, &encoding);
     }
 
     #[test]
@@ -251,52 +252,163 @@ mod tests {
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         let encoding = pb2cnf.encode_geq(weights, literals, 1, 3);
-        assert_encoding_eq(vec![vec![1, 2]], 3, encoding);
+        assert_encoding_eq(&[vec![1, 2]], 3, &encoding);
     }
 
     #[test]
-    fn test_both_xor() {
+    fn test_both_xor_clauses() {
         let weights = vec![1, 1];
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         let encoding = pb2cnf.encode_both(weights, literals, 1, 1, 3);
-        assert_encoding_eq(vec![vec![-2, -1], vec![1, 2]], 3, encoding);
+        assert_encoding_eq(&[vec![-2, -1], vec![1, 2]], 3, &encoding);
     }
 
     #[test]
-    fn test_at_most_one() {
+    fn test_at_most_one_clause() {
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         let encoding = pb2cnf.encode_at_most_k(literals, 1, 3);
-        assert_encoding_eq(vec![vec![-2, -1]], 3, encoding);
+        assert_encoding_eq(&[vec![-2, -1]], 3, &encoding);
     }
 
     #[test]
-    fn test_at_least_one() {
+    fn test_at_least_one_clause() {
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         let encoding = pb2cnf.encode_at_least_k(literals, 1, 3);
-        assert_encoding_eq(vec![vec![1, 2]], 3, encoding);
+        assert_encoding_eq(&[vec![1, 2]], 3, &encoding);
     }
 
     fn assert_encoding_eq(
-        expected_formula: Vec<Vec<i32>>,
+        expected_formula: &[Vec<i32>],
         expected_next_free_var_id: i32,
-        encoding: EncodingResult,
+        encoding: &EncodingResult,
     ) {
         assert_eq!(expected_next_free_var_id, encoding.next_free_var_id());
         let mut clauses = encoding.clauses().to_vec();
         clauses.iter_mut().for_each(|cl| cl.sort_unstable());
         clauses.sort_unstable();
-        assert_eq!(expected_formula, clauses)
+        assert_eq!(expected_formula, clauses);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "weights len (1) and literals len (2) must be equal")]
     fn test_weights_and_literals_len_mismatch() {
         let weights = vec![1];
         let literals = vec![1, 2];
         let pb2cnf = PB2CNF::new();
         pb2cnf.encode_leq(weights, literals, 1, 3);
+    }
+
+    fn check_models(
+        encoding: &EncodingResult,
+        init_n_vars: usize,
+        property: &dyn Fn(&[i32]) -> bool,
+        n_models: usize,
+    ) {
+        let mut solver = Solver::try_from((Config::default(), encoding.clauses())).unwrap();
+        let mut models = solver
+            .iter()
+            .map(|m| {
+                let mut c = m.clone();
+                c.truncate(init_n_vars);
+                c
+            })
+            .collect::<Vec<_>>();
+        models.sort_unstable();
+        models.dedup();
+        assert_eq!(n_models, models.len());
+        for m in &models {
+            assert!(property(m));
+        }
+    }
+
+    fn check_unsat(encoding: &EncodingResult) {
+        if encoding.clauses().iter().any(Vec::is_empty) {
+            return;
+        }
+        let mut solver = match Solver::try_from((Config::default(), encoding.clauses())) {
+            Ok(s) => s,
+            Err(r) => match r {
+                Ok(Certificate::SAT(_)) => panic!(),
+                Ok(Certificate::UNSAT)
+                | Err(SolverError::EmptyClause | SolverError::Inconsistent) => return,
+                _ => panic!("internal error"),
+            },
+        };
+        assert_eq!(Ok(Certificate::UNSAT), solver.solve());
+    }
+
+    fn model_cost(weights: &[i64], model: &[i32]) -> i64 {
+        model
+            .iter()
+            .map(|l| {
+                if *l > 0 {
+                    weights[usize::try_from(*l - 1).unwrap()]
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
+
+    #[test]
+    fn test_leq() {
+        let weights = vec![8, 4, 2, 1];
+        let literals = vec![1, 2, 3, 4];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_leq(weights.clone(), literals, 6, 5);
+        check_models(&encoding, 4, &|m| model_cost(&weights, m) <= 6, 7);
+    }
+
+    #[test]
+    fn test_geq() {
+        let weights = vec![8, 4, 2, 1];
+        let literals = vec![1, 2, 3, 4];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_geq(weights.clone(), literals, 6, 5);
+        check_models(&encoding, 4, &|m| model_cost(&weights, m) >= 6, 10);
+    }
+
+    #[test]
+    fn test_both() {
+        let weights = vec![8, 4, 2, 1];
+        let literals = vec![1, 2, 3, 4];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_both(weights.clone(), literals, 7, 5, 5);
+        check_models(
+            &encoding,
+            4,
+            &|m| model_cost(&weights, m) >= 5 && model_cost(&weights, m) <= 7,
+            3,
+        );
+    }
+
+    #[test]
+    fn test_both_unsat() {
+        let weights = vec![8, 4, 2, 1];
+        let literals = vec![1, 2, 3, 4];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_both(weights.clone(), literals, 5, 7, 5);
+        check_unsat(&encoding);
+    }
+
+    #[test]
+    fn test_at_least() {
+        let literals = vec![1, 2, 3];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_at_least_k(literals, 2, 4);
+        let weights = vec![1; 3];
+        check_models(&encoding, 3, &|m| model_cost(&weights, m) >= 2, 4);
+    }
+
+    #[test]
+    fn test_at_most() {
+        let literals = vec![1, 2, 3];
+        let pb2cnf = PB2CNF::new();
+        let encoding = pb2cnf.encode_at_most_k(literals, 2, 4);
+        let weights = vec![1; 3];
+        check_models(&encoding, 3, &|m| model_cost(&weights, m) <= 2, 7);
     }
 }
