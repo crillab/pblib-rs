@@ -1,3 +1,7 @@
+//! # pblib-rs
+//!
+//! Rust safe bindings for pblib.
+
 use cc::Build;
 
 const PBLIB_DIR: &str = "pblib";
@@ -55,11 +59,11 @@ where
         .extra_warnings(true)
         .opt_level(3)
         .define("NDEBUG", "1");
-    flags.iter().for_each(|f| {
+    for f in flags {
         build.flag_if_supported(f);
-    });
-    build.includes(includes.iter().map(|i| i.as_ref()));
-    build.files(files.iter().map(|f| f.as_ref()));
+    }
+    build.includes(includes.iter().map(AsRef::as_ref));
+    build.files(files.iter().map(AsRef::as_ref));
     println!("cargo:rerun-if-changed=build.rs");
     build.compile(output);
 }
@@ -72,7 +76,7 @@ fn main() {
         &[MINISAT_DIR],
         MINISAT_FILES
             .iter()
-            .map(|f| format!("{}/{}", MINISAT_DIR, f))
+            .map(|f| format!("{MINISAT_DIR}/{f}"))
             .collect::<Vec<String>>()
             .as_slice(),
         "libminisat.a",
@@ -90,7 +94,7 @@ fn main() {
         &[PBLIB_DIR, MINISAT_DIR],
         PBLIB_FILES
             .iter()
-            .map(|f| format!("{}/{}", PBLIB_DIR, f))
+            .map(|f| format!("{PBLIB_DIR}/{f}"))
             .collect::<Vec<String>>()
             .as_slice(),
         "libpb.a",
@@ -101,5 +105,5 @@ fn main() {
         &[PBLIB_DIR],
         &["src/cpblib.cc"],
         "libcpblib.a",
-    )
+    );
 }
