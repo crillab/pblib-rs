@@ -39,11 +39,10 @@ const PBLIB_FILES: [&str; 30] = [
 ];
 
 const MINISAT_DIR: &str = "pblib/cli/minisat";
-const MINISAT_FILES: [&str; 5] = [
+const MINISAT_FILES: [&str; 4] = [
     "minisat/utils/Options.cc",
     "minisat/utils/System.cc",
     "minisat/core/Solver.cc",
-    "minisat/core/SolverTypes.cc",
     "minisat/simp/SimpSolver.cc",
 ];
 
@@ -90,6 +89,7 @@ fn main() {
             "-Wno-unused-but-set-variable",
             "-Wno-unused-parameter",
             "-Wno-unused-function",
+            "-Wno-unused-private-field",
         ],
         &[PBLIB_DIR, MINISAT_DIR],
         PBLIB_FILES
